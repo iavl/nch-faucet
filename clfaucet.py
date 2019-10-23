@@ -12,8 +12,9 @@ import subprocess
 
 
 FROM_ACCOUNT = "nch1f94fzxp6hthrx3gzy4dmj6ccwh2xljuyzlwj8t"
+#FROM_ACCOUNT = "nch133vmttt6n49jac5zn3z0klcpe7m8qlugyggx5w"
 
-PASSWD = "11111111"
+PASSWD = ""
 
 # ------------------------------------------------------------------------------------------
 # ------ token transfer limiter
@@ -65,7 +66,7 @@ class GetTokenHandler(tornado.web.RequestHandler):
     tornado.web.RequestHandler.__init__(self, application, request, **kwargs)
 
   def _assembly_args(self, data):
-    if data.has_key('account') and is_valid_account_name(data['account']):
+    if data.has_key('account'):
       p = {}
       p['to']       = data['account']
       p['quantity'] = single_get_token_call_amount
@@ -74,12 +75,10 @@ class GetTokenHandler(tornado.web.RequestHandler):
       return None
 
   def _os_cmd_transfer(self, param):
-    cmd = 'echo "%s" |  nchcli send --from %s --to %s --amount %dunch --gas-prices 0.001unch --memo "for test" -y' % (PASSWD, FROM_ACCOUNT, p['to'], p['quantity']])
-    a = subprocess.Popen('./a.out', stdin = subprocess.PIPE, stdout =subprocess.PIPE)
-    output = a.stdout.read()
-    print output
-    # js = json.loads(response.text)
-    # return js['result']
+    cmd = 'echo "%s" |  nchcli send --from %s --to %s --amount %dunch --gas-prices 0.001unch --memo "for test" -y' % (PASSWD, FROM_ACCOUNT, param['to'], param['quantity'])
+    output = os.popen(cmd).read()
+    js = json.loads(output)
+    return True, js['txhash']
 
   def _make_transfer(self, p):
     return self._os_cmd_transfer(p)
@@ -87,12 +86,13 @@ class GetTokenHandler(tornado.web.RequestHandler):
   def _handle(self, data):
     param = self._assembly_args(data)
     if param:
-      if self._make_transfer(param):
+      ok, txhash = self._make_transfer(param)
+      if ok:
         ip_24h_token_amount_limiter.increase_amount(param['quantity'], self)
         account_24h_token_amount_limiter.increase_amount(1, self)
         print ip_24h_token_amount_limiter.server_name(self)
         print account_24h_token_amount_limiter.server_name(self)
-        write_json_response(self, {'msg': 'succeeded'})
+        write_json_response(self, {'msg': 'succeeded', 'txhash': txhash})
       else:
         failmsg = {'msg': 'transaction failed, possible reason: account does not exist'}
         write_json_response(self, failmsg, 400)
